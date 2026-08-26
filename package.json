@@ -1,0 +1,17 @@
+{
+  "name": "relay-plus",
+  "version": "1.0.0",
+  "private": true,
+  "description": "中转站 Plus —— 自建 AI API 中转站（网关 + 配额计费 + 管理后台，兼容 Sub2API/FlowPilot 对接契约）",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace server",
+    "dev:web": "npm run dev --workspace web",
+    "build": "npm run build --workspace server && npm run build --workspace web",
+    "migrate": "npm run migrate --workspace server",
+    "start": "npm run start --workspace server"
+  }
+}

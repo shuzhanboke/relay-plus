@@ -1,0 +1,12 @@
+
+node_modules/
+dist/
+dist-test/
+*.log
+.env
+.env.local
+.DS_Store
+
+# 工具运行时目录（不应进入公开仓库）
+.reasonix/
+.impeccable/

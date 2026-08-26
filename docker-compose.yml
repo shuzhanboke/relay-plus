@@ -1,0 +1,88 @@
+# 中转站 Plus —— 生产一键部署
+# 组成：postgres（数据）+ server（后端网关/计费）+ web（前端静态资源 + nginx 反代）
+#
+# 使用：
+#   1. cp server/.env.example 为根 .env（唯一配置源，集中存放全部密钥/账户/数据库凭据），并按需修改（务必改 JWT_SECRET / 管理员密码 / POSTGRES_PASSWORD）
+#   2. docker compose up -d --build
+#   3. 访问 http://服务器IP:8080  （Nginx 80 端口映射为 8080，可自行调整）
+#
+# 生产建议：前置 Caddy/云负载均衡启用 HTTPS 反代到 80。
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in root .env}
+      POSTGRES_DB: relay_plus
+    volumes:
+      - relay_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relay -d relay_plus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      DATABASE_URL: postgres://relay:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in root .env}@db:5432/relay_plus
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?set ADMIN_EMAIL / ADMIN_PASSWORD in root .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_EMAIL / ADMIN_PASSWORD in root .env}
+      RUN_MODE: ${RUN_MODE:-full}
+      ALLOW_REGISTER: ${ALLOW_REGISTER:-true}
+      DEFAULT_BALANCE: ${DEFAULT_BALANCE:-0}
+      FREE_GRANT_AMOUNT: ${FREE_GRANT_AMOUNT:-0}
+      SITE_NAME: ${SITE_NAME:-中转站 Plus}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      UPSTREAM_TIMEOUT_MS: 300000
+      # 登录安全
+      LOGIN_MAX_FAILS: ${LOGIN_MAX_FAILS:-5}
+      LOGIN_LOCK_SECONDS: ${LOGIN_LOCK_SECONDS:-600}
+      LOGIN_IP_WINDOW_SEC: ${LOGIN_IP_WINDOW_SEC:-60}
+      LOGIN_IP_BURST: ${LOGIN_IP_BURST:-20}
+      # 注册限制
+      REGISTER_IP_CAP: ${REGISTER_IP_CAP:-5}
+      REGISTER_EMAIL_SUFFIX_WHITELIST: ${REGISTER_EMAIL_SUFFIX_WHITELIST:-}
+      REGISTER_EMAIL_DOMAIN_QUOTA: ${REGISTER_EMAIL_DOMAIN_QUOTA:-0}
+      # 计费与安全开关
+      BALANCE_LOW_THRESHOLD: ${BALANCE_LOW_THRESHOLD:-0}
+      USD_TO_CNY: ${USD_TO_CNY:-7.2}
+      ALLOW_UNPRICED: ${ALLOW_UNPRICED:-false}
+      ALLOW_LOOPBACK_UPSTREAM: ${ALLOW_LOOPBACK_UPSTREAM:-false}
+      ALLOW_GLOBAL_ROUTING: ${ALLOW_GLOBAL_ROUTING:-false}
+      TURNSTILE_SECRET: ${TURNSTILE_SECRET:-}
+      # 可选：GitHub 登录 / 邮件（留空即不启用）
+      OAUTH_GITHUB_CLIENT_ID: ${OAUTH_GITHUB_CLIENT_ID:-}
+      OAUTH_GITHUB_CLIENT_SECRET: ${OAUTH_GITHUB_CLIENT_SECRET:-}
+      OAUTH_GITHUB_REDIRECT_URI: ${OAUTH_GITHUB_REDIRECT_URI:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8080"
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on:
+      - server
+    # 对外端口：本部署环境 80/443 已被面板占用，用 8082；如需改端口改左侧即可
+    ports:
+      - "8082:80"
+
+volumes:
+  relay_pgdata:
+  uploads_data:

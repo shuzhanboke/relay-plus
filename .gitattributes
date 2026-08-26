@@ -1,0 +1,18 @@
+# 统一行尾：源码与脚本一律 LF，避免 Windows 提交 CRLF 破坏 shell 脚本与跨平台 diff
+* text=auto
+
+*.sh       text eol=lf
+*.ts       text eol=lf
+*.tsx      text eol=lf
+*.js       text eol=lf
+*.json     text eol=lf
+*.md       text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.css      text eol=lf
+*.toml     text eol=lf
+*.conf     text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+.gitignore    text eol=lf
+.gitattributes text eol=lf
