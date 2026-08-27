@@ -159,11 +159,25 @@ fn write_env(proj: &Path, yes: bool) -> Result<bool, String> {
     println!("==> 开始引导生成配置（直接回车使用默认值）");
     let site_name = ask("站点名称", "中转站 Plus", yes);
     let admin_email = ask("管理员邮箱", "admin@relay.local", yes);
-    let mut admin_password = ask("管理员密码（留空=自动生成随机）", "", yes);
-    if admin_password.is_empty() {
-        admin_password = rand_password()?;
-        println!("  -> 已自动生成管理员密码: {admin_password}   （仅显示这一次，请记下）");
-    }
+    // 管理员密码：留空自动随机；输入则必须 ≥8 字符，否则重新输入（后端 seed 要求 ≥8）
+    let admin_password = loop {
+        let p = ask("管理员密码（≥8 字符；留空=自动生成随机）", "", yes);
+        if p.is_empty() {
+            let r = rand_password()?;
+            println!("  -> 已自动生成管理员密码: {r}   （仅显示这一次，请记下）");
+            break r;
+        }
+        if p.chars().count() >= 8 {
+            break p;
+        }
+        println!("  !! 管理员密码过短（需 ≥8 字符），请重新输入。");
+        if yes {
+            // --yes 模式无交互，改为自动生成随机密码
+            let r = rand_password()?;
+            println!("  -> 已自动生成随机密码: {r}   （仅显示这一次，请记下）");
+            break r;
+        }
+    };
     let web_port = ask("对外访问端口", "8082", yes);
     let allow_register = ask_yn("是否开放用户注册", true, yes);
     let default_balance = ask("新用户默认余额(美元, 纯充值制填 0)", "0", yes);
