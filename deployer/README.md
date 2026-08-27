@@ -28,21 +28,36 @@ cargo build --release                          # 本机 Windows exe
 
 ## 三平台 / 双架构交叉编译
 
-本机（Windows）只能直接产出 Windows 二进制。完整六产物（win/linux/macOS × x86_64/arm64）由 **GitHub Actions** 生成：
+本机（Windows）只能直接产出 Windows 二进制。完整产物（win/linux/macOS，x86_64/arm64）由 **GitHub Actions** 生成：
 
 - workflow：`.github/workflows/build-deployer.yml`
-- 触发：push 到 `main` 或 `v*` tag。产物以上传 artifact（tag 时可附加到 Release）。
+- 触发：push 到 `main` 或 `v*` tag。产物以上传 artifact（tag 时附加到 Release）。
 
-各产物命名：
+各产物命名（GitHub Actions 实际产出）：
 
 | 产物 | 目标 target |
 |---|---|
-| `relay-plus-deployer.exe` | Windows x86_64-pc-windows-msvc |
-| `relay-plus-deployer-arm64.exe` | Windows aarch64-pc-windows-msvc |
-| `relay-plus-deployer-linux-x86_64` | Linux x86_64-unknown-linux-musl |
-| `relay-plus-deployer-linux-aarch64` | Linux aarch64-unknown-linux-musl |
-| `relay-plus-deployer-macos-x86_64` | macOS x86_64-apple-darwin |
+| `relay-plus-deployer-win-x86_64.exe` | Windows x86_64-pc-windows-msvc |
+| `relay-plus-deployer-win-aarch64.exe` | Windows aarch64-pc-windows-msvc |
+| `relay-plus-deployer-linux-x86_64` | Linux x86_64-unknown-linux-gnu |
+| `relay-plus-deployer-linux-aarch64` | Linux aarch64-unknown-linux-gnu |
 | `relay-plus-deployer-macos-aarch64` | macOS aarch64-apple-darwin |
+
+> macOS x86_64 因 GitHub Intel 自管 runner 排队不可用而暂缺（现代 Mac 均为 Apple Silicon）。
+
+## 自包含单文件（一个文件直接运行）
+
+`scripts/package-selfcontained.sh` 把「部署器二进制 + 该架构服务镜像」合并成一个自包含单文件（约 200MB）：
+运行时自我解包 → `docker load` → 启动，零参数，无需任何配套文件，只需 Docker。
+
+```bash
+# 在某台能 build 目标架构镜像 + 已有该平台部署器二进制的机器上：
+./scripts/package-selfcontained.sh windows-x86_64   # 或 linux-x86_64 / linux-aarch64 / macos-aarch64
+```
+
+自包含单文件分发命名：`relay-plus-selfcontained-<平台>`（Windows 为 `.exe`）。
+
+> x86_64 服务镜像同时适用于 Windows 与 Linux（同为 Linux 容器），macOS/ARM 平台需在对应架构构建 server/web 镜像后打包。
 
 ## 离线安装包
 
