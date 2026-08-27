@@ -45,5 +45,5 @@ printf '\n==RELAY_PLUS_EMBED_BEGIN==\n' >> "$OUT"
 cat "$TMPGZ" >> "$OUT"
 rm -f "$TMPGZ"
 
-echo "==> 完成: $OUT（$(du -h "$OUT" | cut -f1））"
+echo "==> 完成: $OUT（大小: $(du -h "$OUT" | cut -f1)）"
 echo "    用法：下载该文件，在 Windows/Linux 上直接运行即可（需本机已装 Docker）。"
