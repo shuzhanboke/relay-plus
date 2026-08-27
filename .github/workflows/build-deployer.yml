@@ -155,6 +155,8 @@ jobs:
           set -euo pipefail
           BIN=deployer/target/release/relay-plus-deployer
           test -x "$BIN"
+          # 拉取 postgres 基础镜像（compose build 只构建 server/web，不会拉它）
+          docker pull postgres:16-alpine
           # 导出并压缩镜像
           docker save plus-server:latest plus-web:latest postgres:16-alpine | gzip -9 > /tmp/emb.tar.gz
           # 组装 selfcontained（追加 marker + gzip 数据）
