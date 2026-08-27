@@ -245,6 +245,12 @@ fn validate_env(env: &std::collections::HashMap<String, String>) -> Result<(), S
     if !missing.is_empty() {
         return Err(format!("根 .env 缺少必填项: {}", missing.join(" / ")));
     }
+    // 后端 seed 强制 ADMIN_PASSWORD ≥8 字符，否则 server 启动崩溃（nginx 502）
+    if let Some(p) = env.get("ADMIN_PASSWORD") {
+        if p.chars().count() < 8 {
+            return Err("ADMIN_PASSWORD 过短（需 ≥8 字符），否则后端无法创建管理员、服务会 502。请在 .env 中修改后再运行，或用 --reset 重新生成。".into());
+        }
+    }
     println!(
         "==> 配置校验通过（JWT_SECRET 长度: {}）",
         env.get("JWT_SECRET").map(|s| s.len()).unwrap_or(0)
