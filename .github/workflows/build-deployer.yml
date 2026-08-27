@@ -122,3 +122,82 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
+
+  # Linux 端到端（E2E）验证：在真实 Linux 环境构建镜像 → 组装自包含 → 部署 → 登录 API 200
+  # 保证 Linux 版本确实可用（每次 push / tag 自动回归）
+  linux-e2e:
+    name: linux-e2e（真实部署验证）
+    runs-on: ubuntu-latest
+    env:
+      # compose 必填变量（构建镜像时解析 ${VAR:?} 需要）
+      POSTGRES_PASSWORD: e2e_pg_pass_123
+      JWT_SECRET: e2e_jwt_secret_12345678901234567890
+      ADMIN_EMAIL: admin@e2e.local
+      ADMIN_PASSWORD: e2e_admin_pass
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 编译 Linux 部署器（host x86_64）
+        working-directory: deployer
+        run: cargo build --release
+
+      - name: 构建服务镜像
+        run: |
+          docker compose build
+          docker images | grep -E 'plus-server|plus-web'
+
+      - name: 组装 Linux 自包含单文件
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=deployer/target/release/relay-plus-deployer
+          test -x "$BIN"
+          # 导出并压缩镜像
+          docker save plus-server:latest plus-web:latest postgres:16-alpine | gzip -9 > /tmp/emb.tar.gz
+          # 组装 selfcontained（追加 marker + gzip 数据）
+          pkg=/tmp/relay-plus-selfcontained-linux-e2e
+          cp "$BIN" "$pkg"
+          printf '\n==RELAY_PLUS_EMBED_BEGIN==\n' >> "$pkg"
+          cat /tmp/emb.tar.gz >> "$pkg"
+          chmod +x "$pkg"
+          ls -la "$pkg"
+          echo "E2E_BIN=$pkg" >> $GITHUB_ENV
+
+      - name: 端到端部署（自包含 --yes）
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 在空目录运行自包含单文件，--yes 免交互自动随机密钥
+          cd /tmp
+          rm -rf e2e-run && mkdir e2e-run && cd e2e-run
+          cp "$E2E_BIN" ./relay-plus-selfcontained
+          # 用较短的随机来跑：--yes 会生成随机 ≥8 密码，OK
+          timeout 300 ./relay-plus-selfcontained --yes 2>&1 | tee deploy.log
+          echo "--- 校验部署完成 ---"
+          grep -q "部署完成" deploy.log || { echo "E2E 失败：未部署完成"; cat deploy.log; exit 1; }
+          cat deploy.log
+
+      - name: 用登录 API 验证服务正常（防 502）
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 3
+          echo "--- /healthz ---"
+          curl -fsS -m 10 http://127.0.0.1:8082/healthz || { echo "healthz 失败(可能端口不同,查 .env)"; cat /tmp/e2e-run/.env; exit 1; }
+          # 读取实际部署端口与管理员（--yes 生成)
+          PORT=$(grep -E '^WEB_PORT=' /tmp/e2e-run/.env | cut -d= -f2)
+          ADMIN=$(grep -E '^ADMIN_EMAIL=' /tmp/e2e-run/.env | cut -d= -f2)
+          PW=$(grep -E '^ADMIN_PASSWORD=' /tmp/e2e-run/.env | cut -d= -f2)
+          echo "PORT=$PORT ADMIN=$ADMIN PWlen=${#PW}"
+          # 登录验证（防 502 / server 未就绪）
+          BODY=$(printf '{"email":"%s","password":"%s"}' "$ADMIN" "$PW")
+          CODE=$(curl -s -o /tmp/login.json -w '%{http_code}' -m 15 -X POST \
+            -H 'Content-Type: application/json' \
+            -d "$BODY" "http://127.0.0.1:${PORT}/api/v1/auth/login")
+          echo "login http=$CODE"
+          grep -q 'access_token' /tmp/login.json || { echo "E2E 失败：登录未返回 access_token"; cat /tmp/login.json; exit 1; }
+          echo "E2E 通过：Linux 版本部署成功, 登录返回 access_token ✅"
+
