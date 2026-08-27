@@ -76,7 +76,82 @@
 
 > 选择**与你的 CPU 架构匹配**的 Release 产物（x86_64=Intel/AMD，arm64=Apple Silicon/ARM 服务器）。
 
+### 如何安装 Docker（分平台教程）
+
+**Windows 10/11 —— Docker Desktop**
+
+1. 下载安装包：官网 <https://www.docker.com/products/docker-desktop/>（选你的架构 x86_64/arm64）。
+2. 双击安装包，一路「Next」→ 完成后**重启电脑**并启动 Docker Desktop。
+3. 右下角任务栏出现 Docker 图标，变绿即引擎就绪。
+4. 建议：设置里勾选 **WSL 2** 后端（默认）；若用 WSL 需提前 `wsl --install`。
+
+**macOS —— Docker Desktop**
+
+1. 下载 <https://www.docker.com/products/docker-desktop/>（Apple Silicon 或 Intel 对应版本）。
+2. 打开 `.dmg`，把 Docker 拖入 Applications，首次打开按提示允许。
+3. 启动 Docker Desktop，右上角菜单栏鲸鱼图标稳定即就绪。
+
+**Linux（Ubuntu / Debian，推荐）**
+
+```bash
+# 卸载旧版
+sudo apt-get remove docker docker-engine docker.io containerd runc 2>/dev/null || true
+
+# 设置官方仓库 + 安装
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+# 当前用户免 sudo（重新登录生效）
+sudo usermod -aG docker $USER
+```
+
+> CentOS/RHEL：用 `sudo yum install -y yum-utils && sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo && sudo yum install -y docker-ce docker-compose-plugin docker-ce-cli containerd.io && sudo systemctl enable --now docker`。
+
+**验证是否安装成功（所有平台通用）**
+
+```bash
+docker --version          # 例如: Docker version 26.1.0
+docker compose version    # 例如: Docker Compose version v2.27.0
+sudo docker run hello-world   # 能打印 Hello from Docker! 即成功（Linux 先用 sudo 试）
+```
+
+> 容器以 Docker 用户运行：Linux 可用 `sudo usermod -aG docker $USER` 后重登；Windows 用 Docker Desktop 会处理好权限。
+
+### 国内镜像加速（可选，国内拉镜像慢时配置）
+
+国内直连 Docker Hub 经常慢/超时。到 2025 年后多数大厂的公共加速源已停用，但以下**社区源仍可用**（使用时若失效可换列表里其他源）：
+
+```json
+{ "registry-mirrors": [
+  "https://docker.1ms.run",
+  "https://docker.1panel.live",
+  "https://hub.rat.dev",
+  "https://docker.xuanyuan.me",
+  "https://docker.m.daocloud.io"
+] }
+```
+
+配置位置（二选一）：
+
+- **Linux**：编辑 `/etc/docker/daemon.json`（没有就新建）写入上面的 JSON，然后
+  ```bash
+  sudo systemctl daemon-reload && sudo systemctl restart docker
+  docker info | grep -A5 "Registry Mirrors"   # 出现上面地址即生效
+  ```
+- **Windows/macOS（Docker Desktop）**：右键/点击 Docker 图标 → **Settings → Docker Engine** → 在 JSON 里加 `"registry-mirrors"` 数组 → **Apply & Restart**。
+
+> 若镜像源全部不可用或不想配，就直接用**「方式① 自包含 / 方式② 离线包」**部署——它们镜像已内嵌，部署时**不需要从 Docker Hub 拉镜像**（但仍需先装好 Docker）。
+
 ### 硬件 / 资源建议
+
 
 | 项目 | 建议 |
 |---|---|
