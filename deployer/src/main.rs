@@ -348,6 +348,54 @@ fn deploy(proj: &Path, args: &Args) -> Result<(), String> {
     Ok(())
 }
 
+/// 部署前校验必备文件（给出清晰缺失清单）
+fn validate_required_files(proj: &Path, offline: bool) -> Result<(), String> {
+    let compose = proj.join("docker-compose.yml");
+    let mut missing: Vec<String> = Vec::new();
+    if !compose.exists() {
+        missing.push("docker-compose.yml".into());
+    }
+    if offline {
+        if !proj.join("images.tar").exists() {
+            missing.push("images.tar（离线模式必需；也可放入 images 后再运行）".into());
+        }
+    } else {
+        // 在线模式需要 server/ web/ 源码（用于 docker compose build）
+        if !proj.join("server").join("Dockerfile").exists() {
+            missing.push("server/（在线模式源码，用于 docker compose build）".into());
+        }
+        if !proj.join("web").join("Dockerfile").exists() {
+            missing.push("web/（在线模式源码）".into());
+        }
+    }
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let mode = if offline { "离线" } else { "在线" };
+    // proj 可能带非 ASCII 路径，先用 display
+    Err(format!(
+        "{mode}模式缺少必要文件，请将部署器放到完整安装包中运行：\n  \
+         当前目录: {}\n  缺失: {}\n\n\
+         正确用法（二选一）：\n  \
+         a) 在线包：仓库源码套件（含 server/ web/ docker-compose.yml）+ 部署器二进制\n  \
+         b) 离线包：部署器二进制 + docker-compose.yml + images.tar，并以 --offline 运行\n",
+        proj.display(),
+        missing.join("、")
+    ))
+}
+
+// Windows 双击时可看到结果；出错/完成后等待按键避免窗口闪关
+fn pause_for_exit() {
+    #[cfg(windows)]
+    {
+        use std::io::Write;
+        println!();
+        print!("按任意键退出...");
+        let _ = io::stdout().flush();
+        let _ = io::stdin().read_line(&mut String::new());
+    }
+}
+
 fn main() {
     let args = Args::parse();
     if args.help {
@@ -360,12 +408,14 @@ fn main() {
 
 选项:
   --yes        全部使用默认配置 + 自动随机密钥，免交互部署
-  --offline    离线模式（载入 images.tar 后用 docker compose up --no-build）
+  --offline    离线模式（载入 images.tar 后用 docker compose up --no-build)
   --reset      忽略已有 .env 重新生成（旧配置备份为 .env.bak）
   -h, --help   显示本帮助
 
 说明:
-  - 请在项目根目录运行（需存在 docker-compose.yml）。
+  - 请将本程序放入完整安装包目录运行：
+      · 在线包：仓库源码套件（含 server/ web/ docker-compose.yml）+ 本程序
+      · 离线包：本程序 + docker-compose.yml + images.tar，加 --offline
   - 首次运行自动生成唯一配置源 .env 并创建数据库表与管理员账号。
   - 需要本机已安装 Docker（https://docs.docker.com/get-docker/）。
 "
@@ -377,11 +427,20 @@ fn main() {
     let proj = project_dir();
     println!("==> 项目目录: {}", proj.display());
 
-    match deploy(&proj, &args) {
+    let result = (|| -> Result<(), String> {
+        validate_required_files(&proj, args.offline)?;
+        // Docker 环境检查由 deploy() 首步执行
+        deploy(&proj, &args)
+    })();
+
+    match result {
         Ok(()) => {}
         Err(e) => {
-            eprintln!("!! {e}");
+            eprintln!("\n!! {e}");
+            pause_for_exit();
             std::process::exit(1);
         }
     }
+    // 正常结束也暂停，方便双击查看结果
+    pause_for_exit();
 }
