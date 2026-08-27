@@ -13,5 +13,6 @@ dist-test/
 
 # Rust 部署器构建产物（由 GitHub Actions / 本地交叉编译产生）
 deployer/target/
-# 离线镜像包（大体积，走 Release 附件，不进 git）
+# 离线/自包含镜像包（大体积，走 Release 附件，不进 git）
 images.tar
+images.tar.gz

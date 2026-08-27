@@ -14,10 +14,15 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
+use flate2::read::GzDecoder;
+
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 const ENV_TEMPLATE: &str = include_str!("env.template");
 const MIN_SECRET_HEX: usize = 48;
 const ADMIN_PASS_LEN: usize = 16;
+
+/// 自包含镜像段的起始标记（打包时追加在二进制尾部；gzip 数据紧随其后）
+pub const EMBED_MARKER: &[u8] = b"\n==RELAY_PLUS_EMBED_BEGIN==\n";
 
 struct Args {
     yes: bool,
@@ -133,7 +138,6 @@ fn project_dir() -> PathBuf {
 }
 
 // ---------- 生成 .env ----------
-
 fn write_env(proj: &Path, yes: bool) -> Result<bool, String> {
     let env_path = proj.join(".env");
     let env_path_str = env_path.display().to_string();
@@ -264,9 +268,16 @@ fn run_cmd(program: &str, args: &[&str]) -> io::Result<bool> {
 }
 
 /// 轮询 compose ps，直到 db healthy + server up，最多 120s
-fn wait_healthy() -> bool {
+/// compose_file: 自包含模式传临时 compose 路径，None 用当前目录 compose
+fn wait_healthy(compose_file: Option<&Path>) -> bool {
     for _ in 0..24 {
-        let out = Command::new("docker").args(["compose", "ps", "--format", "{{.Service}}:{{.Status}}"]).output();
+        let mut cmd = Command::new("docker");
+        cmd.arg("compose");
+        if let Some(f) = compose_file {
+            cmd.args(["-f", &f.display().to_string()]);
+        }
+        cmd.args(["ps", "--format", "{{.Service}}:{{.Status}}"]);
+        let out = cmd.output();
         if let Ok(o) = out {
             let text = String::from_utf8_lossy(&o.stdout).to_string();
             let db_ok = text.lines().any(|l| l.starts_with("db:") && l.to_lowercase().contains("healthy"));
@@ -280,6 +291,184 @@ fn wait_healthy() -> bool {
     }
     eprintln!("!! 等待超时（120s），请用 `docker compose logs -f server` 排查");
     false
+}
+
+// ---------- 自包含模式（单文件直接运行） ----------
+
+/// 读取当前可执行文件自身，若尾部带内嵌镜像标记则返回其位置
+fn self_path() -> Result<PathBuf, String> {
+    env::current_exe().map_err(|e| format!("无法定位可执行文件: {e}"))
+}
+
+/// 自身是否包含内嵌镜像段（被打包成自包含单文件）
+fn has_embedded_payload() -> bool {
+    let Ok(p) = self_path() else { return false };
+    let Ok(bytes) = fs::read(&p) else { return false };
+    // marker 位于 gzip 镜像段之前（可能在文件中部），此处全量扫描
+    find_subslice(&bytes, EMBED_MARKER).is_some()
+}
+
+/// 简单子串查找，返回**最后一个**匹配的起始索引（内嵌 marker 在二进制尾部，需取最后一个而非常量首次出现）
+fn find_subslice(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() || needle.len() > hay.len() { return None; }
+    let mut last = None;
+    for i in 0..=(hay.len() - needle.len()) {
+        if &hay[i..i + needle.len()] == needle {
+            last = Some(i);
+        }
+    }
+    last
+}
+
+/// 解出内嵌镜像：读取自身，取 marker 之后全部字节 → gzip 解压 → 写入 work_dir/images.tar
+fn extract_embedded_images(work_dir: &Path) -> Result<PathBuf, String> {
+    let path = self_path()?;
+    let bytes = fs::read(&path).map_err(|e| format!("读取自身失败: {e}"))?;
+    let marker_idx = find_subslice(&bytes, EMBED_MARKER)
+        .ok_or("当前二进制不含内嵌镜像段")?;
+    let gz_data = &bytes[marker_idx + EMBED_MARKER.len()..];
+    if gz_data.is_empty() {
+        return Err("内嵌镜像数据为空".into());
+    }
+
+    println!("==> 从自身解包镜像（{} MB）...", gz_data.len() / 1024 / 1024);
+    let tar_path = work_dir.join("images.tar");
+    let mut decoder = GzDecoder::new(gz_data);
+    let mut out = fs::File::create(&tar_path).map_err(|e| format!("创建镜像文件失败: {e}"))?;
+    io::copy(&mut decoder, &mut out).map_err(|e| format!("解压镜像失败: {e}"))?;
+    Ok(tar_path)
+}
+
+/// 生成镜像模式的 compose 配置（不依赖源码，自包含运行时使用）
+fn write_selfcontained_compose(work_dir: &Path, env: &std::collections::HashMap<String, String>, web_port: &str) -> Result<PathBuf, String> {
+    let site_name = env.get("SITE_NAME").cloned().unwrap_or_else(|| "中转站 Plus".into());
+    let allow_register = env.get("ALLOW_REGISTER").cloned().unwrap_or_else(|| "true".into());
+    let pg_pw = env.get("POSTGRES_PASSWORD").cloned().unwrap_or_else(String::new);
+    let default_balance = env.get("DEFAULT_BALANCE").cloned().unwrap_or_else(|| "0".into());
+    let free_grant = env.get("FREE_GRANT_AMOUNT").cloned().unwrap_or_else(|| "0".into());
+    let jwt = env.get("JWT_SECRET").cloned().unwrap_or_else(String::new);
+
+    let compose = format!(
+r#"# 自包含模式临时编排（由部署器运行时生成）
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: "{pg_pw}"
+      POSTGRES_DB: relay_plus
+    volumes:
+      - relay_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relay -d relay_plus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    image: plus-server:latest
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      DATABASE_URL: "postgres://relay:{pg_pw}@db:5432/relay_plus"
+      JWT_SECRET: "{jwt}"
+      ADMIN_EMAIL: "{admin_email}"
+      ADMIN_PASSWORD: "{admin_password}"
+      RUN_MODE: full
+      SITE_NAME: "{site_name}"
+      ALLOW_REGISTER: "{allow_register}"
+      DEFAULT_BALANCE: "{default_balance}"
+      FREE_GRANT_AMOUNT: "{free_grant}"
+      ALLOW_UNPRICED: "false"
+      ALLOW_LOOPBACK_UPSTREAM: "false"
+      ALLOW_GLOBAL_ROUTING: "false"
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8080"
+
+  web:
+    image: plus-web:latest
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "{web_port}:80"
+volumes:
+  relay_pgdata:
+  uploads_data:
+"#,
+        admin_email = env.get("ADMIN_EMAIL").cloned().unwrap_or_else(|| "admin@relay.local".into()),
+        admin_password = env.get("ADMIN_PASSWORD").cloned().unwrap_or_else(String::new),
+    );
+
+    let path = work_dir.join("compose.yml");
+    fs::write(&path, compose).map_err(|e| format!("写入临时 compose 失败: {e}"))?;
+    Ok(path)
+}
+
+/// 自包含部署主流程：解包镜像 → load → 用镜像 compose 启动
+fn deploy_selfcontained(args: &Args) -> Result<(), String> {
+    find_docker()?;
+
+    // 工作目录 = 用户当前运行目录（自包含单文件随处可跑，不受顶层 compose/源码影响）
+    let proj = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    write_env(&proj, args.yes)?;
+    let env = parse_env(&proj.join(".env"))?;
+    validate_env(&env)?;
+    let web_port = env.get("WEB_PORT").cloned().unwrap_or_else(|| "8082".into());
+
+    // 临时解包目录
+    let work = env::temp_dir().join("relay-plus-embedded");
+    if !work.exists() {
+        fs::create_dir_all(&work).map_err(|e| format!("创建临时目录失败: {e}"))?;
+    }
+
+    // 解包镜像并 load
+    let tar = extract_embedded_images(&work)?;
+    println!("==> 载入内嵌镜像 ...");
+    if !run_cmd("docker", &["load", "-i", tar.to_str().unwrap_or("images.tar")]).map_err(|e| e.to_string())? {
+        return Err("docker load 失败".into());
+    }
+
+    // 生成镜像 compose 并启动
+    let compose = write_selfcontained_compose(&work, &env, &web_port)?;
+    println!("==> 启动服务 ...");
+    let cf = format!("{}", compose.display()); // 用完整路径避免 cwd 依赖
+    if !run_cmd("docker", &["compose", "-f", &cf, "up", "-d"]).map_err(|e| e.to_string())? {
+        return Err("docker compose up 失败，请用 `docker compose -f {} logs -f server` 排查".replace("{}", &cf).into());
+    }
+
+    // 健康检查
+    println!("==> 等待服务健康（最多 120 秒）...");
+    if !wait_healthy(Some(&compose)) {
+        return Err("部署未完成（服务未就绪）。请用 docker compose logs -f server 排查".into());
+    }
+
+    // 输出
+    let admin_email = env.get("ADMIN_EMAIL").cloned().unwrap_or_else(|| "admin@relay.local".into());
+    println!();
+    println!("===============================================================");
+    println!("  部署完成 ✅ 中转站 Plus 已上线");
+    println!("===============================================================");
+    println!("  访问地址 : http://<本机IP>:{web_port}/login");
+    println!("  管理后台 : http://<本机IP>:{web_port}/app");
+    println!("  管理员   : {admin_email}");
+    println!();
+    println!("  常用命令:");
+    println!("    查看日志 : docker compose -f {} logs -f server", compose.display());
+    println!("    停止     : docker compose -f {} down", compose.display());
+    println!();
+    println!("  HTTPS: 建议前置 Caddy / Nginx / 云负载均衡反代到 {web_port}。");
+    println!("===============================================================");
+    Ok(())
 }
 
 // ---------- 主流程 ----------
@@ -322,7 +511,7 @@ fn deploy(proj: &Path, args: &Args) -> Result<(), String> {
 
     // 5. 健康检查
     println!("==> 等待服务健康（最多 120 秒）...");
-    if !wait_healthy() {
+    if !wait_healthy(None) {
         return Err("部署未完成（服务未就绪）。请用 `docker compose logs -f server` 排查".into());
     }
 
@@ -424,6 +613,24 @@ fn main() {
     }
 
     print_banner();
+
+    // 若被打包成自包含单文件（内嵌镜像段），优先自包含部署
+    if has_embedded_payload() {
+        println!("==> 检测到自包含单文件（内嵌镜像）");
+        let result = deploy_selfcontained(&args);
+        match result {
+            Ok(()) => {
+                pause_for_exit();
+                return;
+            }
+            Err(e) => {
+                eprintln!("\n!! {e}");
+                pause_for_exit();
+                std::process::exit(1);
+            }
+        }
+    }
+
     let proj = project_dir();
     println!("==> 项目目录: {}", proj.display());
 

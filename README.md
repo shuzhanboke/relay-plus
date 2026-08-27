@@ -61,6 +61,18 @@
 
 ### 快速部署（一键部署器，推荐）
 
+**最简单：自包含单文件（推荐下载用户使用）**
+
+从 Release 下载一个**自包含部署器**（对应你系统的平台，约 200MB），它内嵌了全部服务镜像，**放到任意文件夹，直接一键运行**，不依赖源码、配置或网络：
+
+- Windows：双击 `relay-plus-selfcontained-win-x86_64.exe`（或在 cmd 中运行）
+- Linux：`./relay-plus-selfcontained-linux-x86_64`、`./relay-plus-selfcontained-linux-aarch64`
+- macOS：`./relay-plus-selfcontained-macos-aarch64`
+
+运行后自动完成：检测 Docker → 引导输入站点/管理员/端口（回车用默认）→ 从自身解包镜像 → `docker load` → 启动全套服务 → 健康检查 → 打印访问地址。全程零参数、无需任何配套文件，只需本机装有 Docker。
+
+**标准二进制（轻量，源码套件配套）**
+
 部署器是跨平台 Rust 二进制（Windows/Linux/macOS，x86_64 与 arm64），从 Release 下载后即可运行，无需安装任何语言环境，仅需目标机器已装 **Docker**。
 
 ```bash
@@ -80,6 +92,7 @@
 | `relay-plus-deployer --offline` | 离线模式（载入 `images.tar` 后 `docker compose up --no-build`，不依赖外网） |
 | `relay-plus-deployer --reset` | 忽略已有 `.env` 重新生成（旧配置备份为 `.env.bak`） |
 | `relay-plus-deployer --help` | 查看帮助 |
+| `relay-plus-deployer --yes`（自包含） | 自包含单文件同样支持 `--yes`，一键无交互 |
 
 **Windows**：双击 `relay-plus-deployer.exe`（或在 cmd 中 `relay-plus-deployer.exe`）即可。
 
