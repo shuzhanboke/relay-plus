@@ -55,13 +55,50 @@
 
 ---
 
+## 运行环境要求
+
+### 统一前提（所有下载/运行方式都必须满足）
+
+中转站以 **Docker 容器**运行（托管 PostgreSQL + 后端 Node + 前端 Nginx）。无论用「方式①~⑤」哪种方式部署，**目标机器都必须已安装 Docker**：
+
+- **Docker Engine 20.10+**（含 `docker compose` v2 命令，或旧版 `docker-compose`）。安装：[Docker 官方](https://docs.docker.com/get-docker/) / [Windows](https://www.docker.com/products/docker-desktop/) / [Linux](https://docs.docker.com/engine/install/) / [macOS](https://www.docker.com/products/docker-desktop/)
+- 校验：`docker --version` 与 `docker compose version` 都能正常输出版本号
+
+> 部署器是**静态编译的单一可执行文件**：除了 Docker，**不要求**目标机安装 Node.js / Go / Rust / Python 等任何运行环境。
+
+### 平台与架构
+
+| 系统 | 架构 | 说明 |
+|---|---|---|
+| Windows | x86_64 / arm64 | Windows 10/11；双击 exe 或 cmd 运行 |
+| Linux | x86_64 / arm64 | 主流发行版（Ubuntu/Debian/CentOS 等） |
+| macOS | arm64(Apple Silicon)、x86_64 | macOS 12+ |
+
+> 选择**与你的 CPU 架构匹配**的 Release 产物（x86_64=Intel/AMD，arm64=Apple Silicon/ARM 服务器）。
+
+### 硬件 / 资源建议
+
+| 项目 | 建议 |
+|---|---|
+| 内存 | ≥ 2 GB（容器：PostgreSQL + Node + Nginx） |
+| 磁盘 | 预留 ≥ 3 GB（镜像 ~2GB + 数据库数据卷） |
+| 网络 | 在线方式(③④⑤)需要能拉取/构建镜像；离线方式(①②)需提前准备好镜像，运行时可不联网 |
+| 端口 | 对外默认 `8082`（`WEB_PORT`，可改）；容器内部固定 5432/8080/80 |
+
+### 前端访问
+
+- 部署完成后用**任意现代浏览器**（Chrome/Edge/Firefox/Safari）访问 `http://服务器IP:端口/login`。
+
+---
+
 ## 快速开始
 
 生产与本地开发都使用**项目根目录 `.env`** 作为唯一配置源（集中存放全部密钥 / 账户 / 数据库凭据）。模板与字段说明见 `server/.env.example`。
 
 ### 0. 方式速览（选一种）
 
-本节为你列出**所有下载和运行中转站的方式**，按「越简单越靠前」排序，任选其一即可。所有方式都只需目标机器已装 **Docker**（[下载 Docker](https://docs.docker.com/get-docker/)）；首次运行会自动建表并创建管理员账号。
+本节为你列出**所有下载和运行中转站的方式**，按「越简单越靠前」排序，任选其一即可。所有方式都满足上述「运行环境要求」；首次运行会自动建表并创建管理员账号。
+
 
 | 方式 | 下载内容 | 运行命令 | 是否要网络构建 | 适用 |
 |---|---|---|---|---|
