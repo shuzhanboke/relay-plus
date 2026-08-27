@@ -301,11 +301,18 @@ fn self_path() -> Result<PathBuf, String> {
 }
 
 /// 自身是否包含内嵌镜像段（被打包成自包含单文件）
+/// 判定：找到**最后一个** marker，且其后方紧邻有效 gzip（magic 0x1F 0x8B）并有足够数据。
 fn has_embedded_payload() -> bool {
     let Ok(p) = self_path() else { return false };
     let Ok(bytes) = fs::read(&p) else { return false };
-    // marker 位于 gzip 镜像段之前（可能在文件中部），此处全量扫描
-    find_subslice(&bytes, EMBED_MARKER).is_some()
+    let Some(marker_idx) = find_subslice(&bytes, EMBED_MARKER) else { return false };
+    let after = bytes.len().saturating_sub(marker_idx + EMBED_MARKER.len());
+    // 紧邻 gzip magic（1F 8B），且至少有 ~8MB（避免误判源码常量后的一小段数据）
+    let min_payload = 8 * 1024 * 1024;
+    after >= min_payload
+        && bytes.len() > marker_idx + EMBED_MARKER.len() + 1
+        && bytes[marker_idx + EMBED_MARKER.len()] == 0x1F
+        && bytes[marker_idx + EMBED_MARKER.len() + 1] == 0x8B
 }
 
 /// 简单子串查找，返回**最后一个**匹配的起始索引（内嵌 marker 在二进制尾部，需取最后一个而非常量首次出现）

@@ -27,6 +27,7 @@ services:
       retries: 5
 
   server:
+    image: plus-server:latest
     build: ./server
     restart: unless-stopped
     environment:
@@ -77,6 +78,7 @@ services:
       - "8080"
 
   web:
+    image: plus-web:latest
     build: ./web
     restart: unless-stopped
     depends_on:
