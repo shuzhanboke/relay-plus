@@ -1,0 +1,15 @@
+[package]
+name = "relay-plus-deployer"
+version = "0.1.0"
+edition = "2021"
+description = "中转站 Plus 一键部署部署器（Windows / Linux / macOS，x86_64 / arm64）"
+license = "MIT"
+
+[dependencies]
+# 唯一第三方依赖：跨平台安全随机数（生成 JWT/数据库密码）。纯 Rust，交叉编译无障碍。
+getrandom = "0.2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

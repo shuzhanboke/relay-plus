@@ -59,36 +59,61 @@
 
 生产与本地开发都使用**项目根目录 `.env`** 作为唯一配置源（集中存放全部密钥 / 账户 / 数据库凭据）。模板与字段说明见 `server/.env.example`。
 
-### 生产部署（Docker Compose，推荐）
+### 快速部署（一键部署器，推荐）
 
-前置：Docker 20.10+ 与 Docker Compose v2+（或直接使用 `deploy.sh`）。
+部署器是跨平台 Rust 二进制（Windows/Linux/macOS，x86_64 与 arm64），从 Release 下载后即可运行，无需安装任何语言环境，仅需目标机器已装 **Docker**。
 
 ```bash
-git clone <你的仓库地址> relay-plus && cd relay-plus
+# 1) 下载对应平台的部署器二进制（Release → Assets），放入项目根目录
+#    或从仓库下载源码套件（含 docker-compose.yml 与源码）
 
-# 1) 用模板创建唯一的根 .env，并按需修改
-cp server/.env.example .env
-#   务必修改 JWT_SECRET / ADMIN_PASSWORD / POSTGRES_PASSWORD 等敏感项
-#   （生产建议：openssl rand -hex 32 生成 JWT_SECRET，openssl rand -hex 16 生成 POSTGRES_PASSWORD）
-
-# 2) 一键校验 + 构建 + 启动 + 健康检查
-./deploy.sh
+# 2) 一行部署（交互式引导，回车使用默认值）
+./relay-plus-deployer
 ```
 
-`deploy.sh` 会：校验 `.env` 必填项（`JWT_SECRET` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `POSTGRES_PASSWORD` / `DATABASE_URL`）→ 检查 Docker → `docker compose up -d --build` → 健康检查（超时视为失败，exit 1）→ 打印访问信息。
+部署器自动完成：环境检查 → 引导生成根 `.env`（自动生成随机 `JWT_SECRET` / 数据库密码）→ 启动 → 健康检查 → 打印使用信息。**首次运行自动创建数据表与管理员账号**，全程无需手改配置。
 
-手动等价命令：
+| 命令 | 说明 |
+|---|---|
+| `relay-plus-deployer` | 交互式引导部署（在线；含源码时 `docker compose up --build`） |
+| `relay-plus-deployer --yes` | 全部默认配置 + 自动随机密钥，免交互部署 |
+| `relay-plus-deployer --offline` | 离线模式（载入 `images.tar` 后 `docker compose up --no-build`，不依赖外网） |
+| `relay-plus-deployer --reset` | 忽略已有 `.env` 重新生成（旧配置备份为 `.env.bak`） |
+| `relay-plus-deployer --help` | 查看帮助 |
+
+**Windows**：双击 `relay-plus-deployer.exe`（或在 cmd 中 `relay-plus-deployer.exe`）即可。
+
+按提示完成配置后，访问：
+
+- 登录页：`http://服务器IP:端口/login`（默认端口 `8082`）
+- 管理后台：`http://服务器IP:端口/app`
+- 管理员账号：引导时设置的邮箱（默认 `admin@relay.local`）与密码
+
+> 端口默认 `8082`，可在根 `.env` 中改 `WEB_PORT` 后重新运行部署器生效。
+
+### 离线安装（内网 / 无外网）
+
+从 Release 下载 **离线安装包**（`relay-plus-offline-<平台>.zip`，内含部署器二进制 + `docker-compose.yml` + `images.tar`）：
 
 ```bash
+unzip relay-plus-offline-linux-x86_64.zip
+./relay-plus-deployer --offline
+```
+
+部署器会 `docker load -i images.tar` 后 `docker compose up -d --no-build`，全程不联网。
+
+### 手动部署（备选 / 开发）
+
+> 需要源码与网络；日常部署优先用部署器。
+
+```bash
+cp server/.env.example .env        # 手动创建配置（务必改 JWT_SECRET / ADMIN_PASSWORD / POSTGRES_PASSWORD）
 docker compose up -d --build
-docker compose ps            # 等待 db 变 healthy、server 为 up
+docker compose ps                  # 等待 db 变 healthy、server 为 up
 docker compose logs -f server
 ```
 
-- 管理后台：`http://服务器IP:8082`（Nginx 对外映射，端口可在 `docker-compose.yml` 的 `web.ports` 左侧调整）
-- 默认管理员：`admin@relay.local` / `admin123456`（来自 `.env`，首次登录后请修改）
-
-> 生产必须配合 HTTPS：前置 Caddy / Nginx / 云负载均衡 反代到 80/443。详见 [DEPLOY.md](./DEPLOY.md)。
+> 生产必须配合 HTTPS：前置 Caddy / Nginx / 云负载均衡 反代到 `${WEB_PORT}`。详见 [DEPLOY.md](./DEPLOY.md)。
 
 ### 本地开发
 

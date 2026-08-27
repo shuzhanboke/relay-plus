@@ -1,0 +1,78 @@
+name: build-deployer
+
+# 构建「中转站 Plus 一键部署器」三平台二进制 + 离线安装包
+# 触发：push 到 main / 手动 / tag v*（tag 触发会 attach 到 Release）
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deployer:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x86_64
+            os: windows-latest
+            host_target: x86_64-pc-windows-msvc
+            out_name: relay-plus-deployer.exe
+          - name: windows-aarch64
+            os: windows-latest
+            host_target: aarch64-pc-windows-msvc
+            out_name: relay-plus-deployer-arm64.exe
+          - name: linux-x86_64
+            os: ubuntu-latest
+            host_target: x86_64-unknown-linux-musl
+            out_name: relay-plus-deployer-linux-x86_64
+          - name: linux-aarch64
+            os: ubuntu-latest
+            host_target: aarch64-unknown-linux-musl
+            out_name: relay-plus-deployer-linux-aarch64
+          - name: macOS-x86_64
+            os: macos-13
+            host_target: x86_64-apple-darwin
+            out_name: relay-plus-deployer-macos-x86_64
+          - name: macOS-aarch64
+            os: macos-14
+            host_target: aarch64-apple-darwin
+            out_name: relay-plus-deployer-macos-aarch64
+    defaults:
+      run:
+        working-directory: deployer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Rust toolchain + 目标
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.host_target }}
+
+      # Linux: musl 需要 musl-tools 提供 cc 链接器（ubuntu runner 可装）
+      - name: 安装 musl-tools（仅 Linux）
+        if: contains(matrix.os, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      # Windows arm64: 安装 MSVC arm64 工具链
+      - name: 安装 Windows arm64 MSVC 工具链
+        if: contains(matrix.name, 'windows-aarch64')
+        shell: pwsh
+        run: |
+          choco install llvm -y --no-progress
+          echo "LIBCLANG_PATH=$env:ProgramFiles\LLVM\bin" >> $env:GITHUB_ENV
+
+      - name: 交叉编译（release）
+        run: cargo build --release --target ${{ matrix.host_target }}
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: deployer/target/${{ matrix.host_target }}/release/${{ matrix.out_name }}
+          if-no-files-found: error

@@ -1,12 +1,14 @@
-# 中转站 Plus —— 生产一键部署
+# 中转站 Plus —— 生产一键部署（推荐直接运行 ./deploy.sh，本文件一般无需手动编辑）
 # 组成：postgres（数据）+ server（后端网关/计费）+ web（前端静态资源 + nginx 反代）
 #
 # 使用：
-#   1. cp server/.env.example 为根 .env（唯一配置源，集中存放全部密钥/账户/数据库凭据），并按需修改（务必改 JWT_SECRET / 管理员密码 / POSTGRES_PASSWORD）
-#   2. docker compose up -d --build
-#   3. 访问 http://服务器IP:8080  （Nginx 80 端口映射为 8080，可自行调整）
+#   1. ./deploy.sh          （交互式引导生成根 .env 并完成部署）
+#   2. 访问 http://服务器IP:${WEB_PORT:-8082}/login
 #
-# 生产建议：前置 Caddy/云负载均衡启用 HTTPS 反代到 80。
+# 必填环境变量（由根 .env 提供）：POSTGRES_PASSWORD / JWT_SECRET / ADMIN_EMAIL / ADMIN_PASSWORD
+# 可选：WEB_PORT（对外访问端口，默认 8082）、PUBLIC_BASE_URL、ALLOW_REGISTER 等。
+#
+# 生产建议：前置 Caddy/云负载均衡启用 HTTPS 反代到 ${WEB_PORT:-8082}。
 
 services:
   db:
@@ -79,9 +81,9 @@ services:
     restart: unless-stopped
     depends_on:
       - server
-    # 对外端口：本部署环境 80/443 已被面板占用，用 8082；如需改端口改左侧即可
+    # 对外访问端口（可在根 .env 中通过 WEB_PORT 修改，默认 8082）
     ports:
-      - "8082:80"
+      - "${WEB_PORT:-8082}:80"
 
 volumes:
   relay_pgdata:
