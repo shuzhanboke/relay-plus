@@ -15,7 +15,7 @@ export default function Profile() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (newPwd.length < 6) return toast('新密码至少 6 位', 'err');
+    if (newPwd.length < 8) return toast('新密码至少 8 位', 'err');
     if (newPwd !== newPwd2) return toast('两次输入的新密码不一致', 'err');
     setBusy(true);
     try {
@@ -57,7 +57,7 @@ export default function Profile() {
         <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><LockKey size={16} weight="regular" />修改密码</h2>
         <form onSubmit={submit}>
           <div className="field"><label>原密码</label><input type="password" value={oldPwd} onChange={(e) => setOldPwd(e.target.value)} required /></div>
-          <div className="field"><label>新密码</label><input type="password" value={newPwd} onChange={(e) => setNewPwd(e.target.value)} required minLength={6} /></div>
+          <div className="field"><label>新密码</label><input type="password" value={newPwd} onChange={(e) => setNewPwd(e.target.value)} required minLength={8} /></div>
           <div className="field"><label>确认新密码</label><input type="password" value={newPwd2} onChange={(e) => setNewPwd2(e.target.value)} required /></div>
           <button className="btn btn-primary" disabled={busy}>{busy ? '处理中…' : '保存新密码'}</button>
         </form>

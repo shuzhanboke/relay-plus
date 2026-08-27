@@ -105,7 +105,7 @@ authRouter.post('/auth/register', async (req, res) => {
   if (Number(r.rows[0].count) > REGISTER_IP_CAP) {
     return failure(res, '注册过于频繁，请稍后再试', 429);
   }
-  const schema = z.object({ email: z.string().email(), password: z.string().min(6), username: z.string().optional() });
+  const schema = z.object({ email: z.string().email(), password: z.string().min(8), username: z.string().optional() });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return failure(res, 'Invalid registration payload', 400);
   const email = parsed.data.email.toLowerCase();
@@ -142,7 +142,7 @@ authRouter.get('/auth/me', requireAuth, async (req, res) => {
 
 // 修改自己的密码（需验证旧密码）
 authRouter.post('/auth/change-password', requireAuth, async (req, res) => {
-  const schema = z.object({ old_password: z.string().min(1), new_password: z.string().min(6) });
+  const schema = z.object({ old_password: z.string().min(1), new_password: z.string().min(8) });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return failure(res, '新密码至少 6 位', 400);
   try {
@@ -172,7 +172,7 @@ authRouter.get('/admin/users', requireAuth, requirePerm('user.manage'), async (r
 authRouter.post('/admin/users', requireAuth, requirePerm('user.manage'), async (req, res) => {
   const schema = z.object({
     email: z.string().email(),
-    password: z.string().min(6),
+    password: z.string().min(8),
     username: z.string().optional(),
     balance: z.number().nonnegative().default(0),
     role: z.enum(['admin', 'user']).default('user'),
@@ -202,7 +202,7 @@ authRouter.patch('/admin/users/:id', requireAuth, requirePerm('user.manage'), as
     balance: z.number().nonnegative().optional(),
     role: z.enum(['admin', 'user']).optional(),
     status: z.enum(['active', 'disabled']).optional(),
-    password: z.string().min(6).optional(),
+    password: z.string().min(8).optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return failure(res, 'Invalid payload', 400);
@@ -368,7 +368,7 @@ authRouter.post('/auth/forgot-password', async (req, res) => {
 
 // 用验证码重置密码
 authRouter.post('/auth/reset-password', async (req, res) => {
-  const schema = z.object({ email: z.string().email(), code: z.string().length(6), new_password: z.string().min(6) });
+  const schema = z.object({ email: z.string().email(), code: z.string().length(6), new_password: z.string().min(8) });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return failure(res, '参数错误', 400);
   const email = parsed.data.email.toLowerCase();

@@ -146,7 +146,9 @@ export default function Login() {
             )}
             <div className="field">
               <label>密码</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder={mode === 'register' ? '至少 6 位' : ''} />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required
+                minLength={mode === 'register' ? 8 : undefined}
+                placeholder={mode === 'register' ? '至少 8 位（含 8）' : ''} />
             </div>
             <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 6 }} disabled={loading}>
               {loading ? '处理中…' : (mode === 'register' ? '注册并登录' : '登录')}
@@ -177,7 +179,7 @@ export default function Login() {
                   <>
                     <div style={{ fontSize: 13, color: '#374151', marginBottom: 8 }}>验证码已发送到 {email}（未配 SMTP 时见服务器日志）。输入验证码和新密码：</div>
                     <input value={resetCode} onChange={(e) => setResetCode(e.target.value)} placeholder="6 位验证码" style={{ marginBottom: 8, width: '100%', padding: 8 }} />
-                    <input type="password" value={resetPwd} onChange={(e) => setResetPwd(e.target.value)} placeholder="新密码（至少 6 位）" style={{ marginBottom: 8, width: '100%', padding: 8 }} />
+                    <input type="password" value={resetPwd} onChange={(e) => setResetPwd(e.target.value)} minLength={8} placeholder="新密码（至少 8 位）" style={{ marginBottom: 8, width: '100%', padding: 8 }} />
                     <div className="modal-actions" style={{ justifyContent: 'center' }}>
                       <button className="btn btn-sm" onClick={() => { setForgot(false); setForgotDone(false); }}>取消</button>
                       <button className="btn btn-sm btn-primary" onClick={doReset}>重置密码</button>

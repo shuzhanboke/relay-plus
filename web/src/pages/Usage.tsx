@@ -69,7 +69,7 @@ export default function Usage() {
 
       {/* 倍率信息条：展示用户实际计费倍率 */}
       {pricing && (
-        <div className="card rise" style={{ '--i': 0.5 } as CSSProperties, { display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 13 }}>
+        <div className="card rise" style={{ '--i': 0.5, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 13 } as CSSProperties}>
           <span style={{ fontWeight: 600 }}>你的实际计费倍率：<span style={{ color: 'var(--accent-deep)' }}>{effectiveRate}×</span></span>
           {rateDiffers ? (
             <span style={{ color: 'var(--text-3)' }}>（全局倍率 {globalMult}×，你绑定的分组倍率 {effectiveRate}× 优先生效）</span>
