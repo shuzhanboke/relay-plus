@@ -59,63 +59,72 @@
 
 生产与本地开发都使用**项目根目录 `.env`** 作为唯一配置源（集中存放全部密钥 / 账户 / 数据库凭据）。模板与字段说明见 `server/.env.example`。
 
-### 快速部署（一键部署器，推荐）
+### 0. 方式速览（选一种）
 
-**最简单：自包含单文件（推荐下载用户使用）**
+本节为你列出**所有下载和运行中转站的方式**，按「越简单越靠前」排序，任选其一即可。所有方式都只需目标机器已装 **Docker**（[下载 Docker](https://docs.docker.com/get-docker/)）；首次运行会自动建表并创建管理员账号。
 
-从 Release 下载一个**自包含部署器**（对应你系统的平台，约 200MB），它内嵌了全部服务镜像，**放到任意文件夹，直接一键运行**，不依赖源码、配置或网络：
+| 方式 | 下载内容 | 运行命令 | 是否要网络构建 | 适用 |
+|---|---|---|---|---|
+| ① 自包含单文件 | 1 个文件（~200MB） | 双击 / `./xxx` | 否 | 最省事，任何用户 |
+| ② 离线安装包 | 1 个 zip（解压后 3 文件） | 解压后 `... --offline` | 否 | 内网/离线 |
+| ③ 在线一键脚本 | 源码套件（git 仓库） | `./deploy.sh` | 是（build 镜像） | 有源码、可联网的服务器 |
+| ④ 部署器二进制 | 1 个轻量二进制（几百 KB） | `./relay-plus-deployer` | 是（build 镜像） | 有源码、要轻量 |
+| ⑤ 手动 Compose | 源码套件 | `docker compose up` | 是（build 镜像） | 高级用户 / 调试 |
 
-- Windows：双击 `relay-plus-selfcontained-win-x86_64.exe`（或在 cmd 中运行）
+> 默认对外端口 `8082`，可在生成后的根 `.env` 里改 `WEB_PORT`。
+
+---
+
+### 方式 ①：自包含单文件（最简单，推荐下载用户）
+
+从 Release 下载**一个自包含部署器**（已内嵌全部服务镜像），**放到任意文件夹，一键运行**，不依赖源码、配置或网络：
+
+- Windows：双击 `relay-plus-selfcontained-win-x86_64.exe`（或 cmd 中 `relay-plus-selfcontained.exe --yes`）
 - Linux：`./relay-plus-selfcontained-linux-x86_64`、`./relay-plus-selfcontained-linux-aarch64`
 - macOS：`./relay-plus-selfcontained-macos-aarch64`
 
-运行后自动完成：检测 Docker → 引导输入站点/管理员/端口（回车用默认）→ 从自身解包镜像 → `docker load` → 启动全套服务 → 健康检查 → 打印访问地址。全程零参数、无需任何配套文件，只需本机装有 Docker。
+自动完成：检测 Docker → 引导输入站点/管理员/端口（回车用默认）→ 从自身解包镜像 → `docker load` → 启动全套 → 健康检查 → 打印访问地址。
 
-**标准二进制（轻量，源码套件配套）**
+### 方式 ②：离线安装包（内网 / 无外网）
 
-部署器是跨平台 Rust 二进制（Windows/Linux/macOS，x86_64 与 arm64），从 Release 下载后即可运行，无需安装任何语言环境，仅需目标机器已装 **Docker**。
-
-```bash
-# 1) 下载对应平台的部署器二进制（Release → Assets），放入项目根目录
-#    或从仓库下载源码套件（含 docker-compose.yml 与源码）
-
-# 2) 一行部署（交互式引导，回车使用默认值）
-./relay-plus-deployer
-```
-
-部署器自动完成：环境检查 → 引导生成根 `.env`（自动生成随机 `JWT_SECRET` / 数据库密码）→ 启动 → 健康检查 → 打印使用信息。**首次运行自动创建数据表与管理员账号**，全程无需手改配置。
-
-| 命令 | 说明 |
-|---|---|
-| `relay-plus-deployer` | 交互式引导部署（在线；含源码时 `docker compose up --build`） |
-| `relay-plus-deployer --yes` | 全部默认配置 + 自动随机密钥，免交互部署 |
-| `relay-plus-deployer --offline` | 离线模式（载入 `images.tar` 后 `docker compose up --no-build`，不依赖外网） |
-| `relay-plus-deployer --reset` | 忽略已有 `.env` 重新生成（旧配置备份为 `.env.bak`） |
-| `relay-plus-deployer --help` | 查看帮助 |
-| `relay-plus-deployer --yes`（自包含） | 自包含单文件同样支持 `--yes`，一键无交互 |
-
-**Windows**：双击 `relay-plus-deployer.exe`（或在 cmd 中 `relay-plus-deployer.exe`）即可。
-
-按提示完成配置后，访问：
-
-- 登录页：`http://服务器IP:端口/login`（默认端口 `8082`）
-- 管理后台：`http://服务器IP:端口/app`
-- 管理员账号：引导时设置的邮箱（默认 `admin@relay.local`）与密码
-
-> 端口默认 `8082`，可在根 `.env` 中改 `WEB_PORT` 后重新运行部署器生效。
-
-### 离线安装（内网 / 无外网）
-
-从 Release 下载 **离线安装包**（`relay-plus-offline-<平台>.zip`，内含部署器二进制 + `docker-compose.yml` + `images.tar`）：
+从 Release 下载 `relay-plus-offline-<平台>.zip`（内含 `relay-plus-deployer` + `docker-compose.yml` + `images.tar`），**解压到独立文件夹**，在该文件夹运行：
 
 ```bash
-unzip relay-plus-offline-linux-x86_64.zip
-./relay-plus-deployer --offline
+unzip relay-plus-offline-win-x86_64.zip
+cd relay-plus-offline-win-x86_64
+relay-plus-deployer --offline     # Linux/macOS: ./relay-plus-deployer --offline
 ```
 
-部署器会 `docker load -i images.tar` 后 `docker compose up -d --no-build`，全程不联网。
+部署器会自动 `docker load -i images.tar` 后 `docker compose up -d --no-build`，全程不联网。（免交互加 `--yes`，重新配置加 `--reset`。）
 
-### 手动部署（备选 / 开发）
+### 方式 ③：在线一键脚本 deploy.sh（有源码、可联网）
+
+克隆源码后在项目根运行：
+
+```bash
+git clone <仓库地址> relay-plus && cd relay-plus
+
+./deploy.sh          # 交互式引导（站点/管理员/端口，回车用默认）
+# 或 ./deploy.sh --yes      免交互 + 自动随机密钥
+#    ./deploy.sh --no-build 已有镜像跳过构建
+#    ./deploy.sh --reset    重建配置（旧配置备份 .env.bak）
+#    ./deploy.sh --help     帮助
+```
+
+自动完成：环境检查 → 引导生成 `.env` → `docker compose up -d --build` → 健康检查 → 打印访问地址。
+
+**Windows**：装好 [Docker Desktop](https://docs.docker.com/get-docker/) 与 [Git for Windows](https://git-scm.com/download/win) 后，**双击 `deploy.bat`**（或 cmd 中 `deploy.bat`）。
+
+### 方式 ④：部署器二进制 + 源码（在线，轻量）
+
+下载 Release 里的轻量部署器二进制（仅几百 KB，不含镜像），放入**源码项目根**运行；它会用旁边的源码 `docker compose up --build`：
+
+```bash
+./relay-plus-deployer                 # 在线构建启动
+./relay-plus-deployer --yes           # 免交互
+```
+
+### 方式 ⑤：手动 Docker Compose（备选 / 开发）
 
 > 需要源码与网络；日常部署优先用部署器。
 
@@ -127,6 +136,18 @@ docker compose logs -f server
 ```
 
 > 生产必须配合 HTTPS：前置 Caddy / Nginx / 云负载均衡 反代到 `${WEB_PORT}`。详见 [DEPLOY.md](./DEPLOY.md)。
+
+---
+
+### 运行后访问
+
+按照以上任意一种方式完成部署后：
+
+- 登录页：`http://服务器IP:端口/login`（默认端口 `8082`）
+- 管理后台：`http://服务器IP:端口/app`
+- 管理员账号：引导时设置的邮箱（默认 `admin@relay.local`）与密码
+
+> 端口可在根 `.env` 的 `WEB_PORT` 修改；自包含/离线包首次运行会生成 `.env` 到你的运行目录。
 
 ### 本地开发
 
