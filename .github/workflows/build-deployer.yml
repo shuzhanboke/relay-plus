@@ -39,11 +39,6 @@ jobs:
             host_target: aarch64-unknown-linux-gnu
             bin: relay-plus-deployer
             out_name: relay-plus-deployer-linux-aarch64
-          - name: macOS-x86_64
-            os: macos-13
-            host_target: x86_64-apple-darwin
-            bin: relay-plus-deployer
-            out_name: relay-plus-deployer-macos-x86_64
           - name: macOS-aarch64
             os: macos-14
             host_target: aarch64-apple-darwin
